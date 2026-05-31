@@ -10,7 +10,7 @@ yyyy <- "2026"
 # ---------------------------
 
 # ---- SET THE DISTRICT HERE ----
-district <- "KANPUR DEHAT"
+district <- "AMROHA"
 # -------------------------------
 
 # Install chromote if missing

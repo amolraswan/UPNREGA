@@ -1,82 +1,86 @@
-# download_pdfs_parallel.R - Save muster roll pages as PDFs using parallel headless Chrome sessions
+# download_pdfs_parallel.R - callable PDF downloader for the desktop app.
 #
-# Dependencies: R, Chrome/Chromium, R packages (chromote, jsonlite, httr, rvest, xml2, dplyr, curl)
-# Chrome is auto-detected. Set CHROMOTE_CHROME env var if it's in a non-standard location.
+# Dependencies must be available before this file runs. The packaged desktop app
+# bundles its own R package library and must never install packages at runtime.
 
-# ---- SET THE DATE HERE ----
-dd   <- "26"
-mm   <- "05"
-yyyy <- "2026"
-# ---------------------------
+required_packages <- c("chromote", "jsonlite", "httr", "rvest", "xml2", "dplyr", "curl")
 
-# ---- SET THE DISTRICT HERE ----
-district <- "AMROHA"
-# -------------------------------
-
-# Install chromote if missing
-if (!requireNamespace("chromote", quietly = TRUE)) {
-  cat("Installing chromote package...\n")
-  install.packages("chromote", repos = "https://cloud.r-project.org")
+missing_packages <- required_packages[!vapply(
+  required_packages,
+  requireNamespace,
+  logical(1),
+  quietly = TRUE
+)]
+if (length(missing_packages) > 0) {
+  stop(
+    "Missing bundled R package(s): ",
+    paste(missing_packages, collapse = ", "),
+    ". Rebuild the app package library before distributing the app.",
+    call. = FALSE
+  )
 }
 
 library(chromote)
 library(jsonlite)
-source("R/scraper.R")
 
-# ---- Validate date early ----
-date_err <- validate_date(dd, mm, yyyy)
-if (!is.null(date_err)) stop("Invalid date (", dd, "/", mm, "/", yyyy, "): ", date_err)
+ensure_scraper_loaded <- function() {
+  if (exists("scrape_up_data", mode = "function") &&
+      exists("UP_DISTRICTS", inherits = TRUE)) {
+    return(invisible(TRUE))
+  }
 
-district_err <- validate_district(district)
-if (!is.null(district_err)) stop("Invalid district: ", district_err)
-district <- canonicalize_district(district)
-dist_slug <- district_slug(district)
-
-date_tag <- paste0(sprintf("%02d", as.integer(dd)),
-                   sprintf("%02d", as.integer(mm)), yyyy)
-
-cat("=== Muster Roll PDF Downloader ===\n")
-cat("District:", district, "\n")
-cat("Date:", dd, "/", mm, "/", yyyy, "\n\n")
-
-# ---- Step 1: Scrape to get muster roll URLs ----
-cat("[1/3] Scraping NREGA data to get muster roll URLs...\n")
-result <- scrape_up_data(district, dd, mm, yyyy, scrape_musters = FALSE,
-  progress_callback = function(val, msg) cat("  ", msg, "\n"))
-
-if (!result$success) stop("Scrape failed: ", result$error)
-df <- result$data
-cat("  Found", nrow(df), "muster rolls\n\n")
-
-# ---- Step 2: Set up output directory ----
-output_dir <- file.path("MusterRollsPDF", date_tag)
-dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
-
-# Build filenames using same convention as scrape_muster_details()
-sanitize <- function(x) gsub("[^A-Za-z0-9_-]", "_", as.character(x))
-df$pdf_name <- paste0(
-  dist_slug, "_",
-  sanitize(df$Block), "_",
-  sanitize(df$Panchayat), "_",
-  date_tag, "_",
-  sanitize(df$Work_Code), "_",
-  sanitize(df$Mustroll_No), ".pdf"
-)
-
-# Check for duplicate filenames and append suffix if needed
-dup_names <- duplicated(df$pdf_name)
-if (any(dup_names)) {
-  cat("  WARNING:", sum(dup_names), "duplicate filename(s) detected - appending row suffix\n")
-  counts <- ave(seq_len(nrow(df)), df$pdf_name, FUN = seq_along)
-  df$pdf_name <- ifelse(
-    df$pdf_name %in% df$pdf_name[dup_names],
-    sub("\\.pdf$", paste0("_", counts, ".pdf"), df$pdf_name),
-    df$pdf_name
+  candidates <- c(
+    file.path(getwd(), "scraper.R"),
+    file.path(getwd(), "R", "scraper.R"),
+    file.path(dirname(normalizePath(sys.frame(1)$ofile %||% ".", mustWork = FALSE)), "scraper.R")
   )
+  candidates <- unique(candidates[file.exists(candidates)])
+  if (length(candidates) == 0) {
+    stop("Could not find scraper.R. Run through app/run.R or place scraper.R next to this script.", call. = FALSE)
+  }
+
+  source(candidates[[1]], local = FALSE)
+  invisible(TRUE)
 }
 
-# ---- Step 3: Save each page as PDF via parallel headless Chrome sessions ----
-num_sessions <- 4
+`%||%` <- function(x, y) {
+  if (is.null(x)) y else x
+}
+
+emit_line <- function(callback, ...) {
+  msg <- sprintf(...)
+  cat(msg)
+  if (!grepl("\n$", msg)) cat("\n")
+  flush.console()
+  if (!is.null(callback)) callback(msg)
+}
+
+sanitize_filename_part <- function(x) {
+  gsub("[^A-Za-z0-9_-]", "_", as.character(x))
+}
+
+make_pdf_names <- function(df, dist_slug, date_tag) {
+  pdf_name <- paste0(
+    dist_slug, "_",
+    sanitize_filename_part(df$Block), "_",
+    sanitize_filename_part(df$Panchayat), "_",
+    date_tag, "_",
+    sanitize_filename_part(df$Work_Code), "_",
+    sanitize_filename_part(df$Mustroll_No), ".pdf"
+  )
+
+  dup_names <- duplicated(pdf_name)
+  if (any(dup_names)) {
+    counts <- ave(seq_along(pdf_name), pdf_name, FUN = seq_along)
+    pdf_name <- ifelse(
+      pdf_name %in% pdf_name[dup_names],
+      sub("\\.pdf$", paste0("_", counts, ".pdf"), pdf_name),
+      pdf_name
+    )
+  }
+
+  pdf_name
+}
 
 download_pdf_rows <- function(row_idx, df, output_dir) {
   library(chromote)
@@ -93,7 +97,6 @@ download_pdf_rows <- function(row_idx, df, output_dir) {
   b <- ChromoteSession$new()
   on.exit(try(b$close(), silent = TRUE), add = TRUE)
 
-  # Force screen media so print CSS rules don't hide content
   b$Emulation$setEmulatedMedia(media = "screen")
 
   for (pos in seq_along(row_idx)) {
@@ -101,7 +104,6 @@ download_pdf_rows <- function(row_idx, df, output_dir) {
     url <- df$Mustroll_Link[i]
     pdf_path <- file.path(output_dir, df$pdf_name[i])
 
-    # --- Skip rows with no URL ---
     if (is.na(url) || url == "") {
       add_message("  [%d/%d] SKIP (no URL): %s\n", i, nrow(df), df$pdf_name[i])
       row_status[pos] <- "skipped_no_url"
@@ -109,7 +111,6 @@ download_pdf_rows <- function(row_idx, df, output_dir) {
       next
     }
 
-    # --- Resume: skip files already downloaded ---
     if (file.exists(pdf_path) && file.size(pdf_path) >= 51200) {
       add_message("  [%d/%d] ALREADY SAVED: %s\n", i, nrow(df), df$pdf_name[i])
       row_status[pos] <- "already_saved"
@@ -122,20 +123,22 @@ download_pdf_rows <- function(row_idx, df, output_dir) {
       tryCatch({
         nav_result <- b$Page$navigate(url)
 
-        # Check for navigation-level errors (DNS failure, connection refused, etc.)
         if (!is.null(nav_result$errorText) && nzchar(nav_result$errorText)) {
-          add_message("  [%d/%d] Attempt %d nav error: %s - %s\n",
-                      i, nrow(df), attempt, df$pdf_name[i], nav_result$errorText)
+          add_message(
+            "  [%d/%d] Attempt %d nav error: %s - %s\n",
+            i, nrow(df), attempt, df$pdf_name[i], nav_result$errorText
+          )
           if (attempt < 3) Sys.sleep(attempt * 2)
           next
         }
 
-        # Wait for the page load event (up to 30s), then a short buffer for rendering
         tryCatch(
           b$Page$loadEventFired(timeout = 30),
           error = function(e) {
-            add_message("  [%d/%d] Attempt %d: page load timeout, proceeding anyway\n",
-                        i, nrow(df), attempt)
+            add_message(
+              "  [%d/%d] Attempt %d: page load timeout, proceeding anyway\n",
+              i, nrow(df), attempt
+            )
           }
         )
         Sys.sleep(3)
@@ -144,17 +147,18 @@ download_pdf_rows <- function(row_idx, df, output_dir) {
           landscape = FALSE,
           printBackground = TRUE,
           preferCSSPageSize = FALSE,
-          paperWidth = 8.27,   # A4
-          paperHeight = 11.69  # A4
+          paperWidth = 8.27,
+          paperHeight = 11.69
         )
 
         raw_pdf <- base64_dec(pdf_data$data)
         writeBin(raw_pdf, pdf_path)
 
-        # Blank pages produce tiny PDFs - treat as failure and retry
         if (file.size(pdf_path) < 51200) {
-          add_message("  [%d/%d] Attempt %d: PDF too small (likely blank): %s\n",
-                      i, nrow(df), attempt, df$pdf_name[i])
+          add_message(
+            "  [%d/%d] Attempt %d: PDF too small (likely blank): %s\n",
+            i, nrow(df), attempt, df$pdf_name[i]
+          )
           file.remove(pdf_path)
           if (attempt < 3) Sys.sleep(attempt * 2)
         } else {
@@ -163,8 +167,10 @@ download_pdf_rows <- function(row_idx, df, output_dir) {
           break
         }
       }, error = function(e) {
-        add_message("  [%d/%d] Attempt %d failed: %s - %s\n",
-                    i, nrow(df), attempt, df$pdf_name[i], e$message)
+        add_message(
+          "  [%d/%d] Attempt %d failed: %s - %s\n",
+          i, nrow(df), attempt, df$pdf_name[i], e$message
+        )
         if (attempt < 3) Sys.sleep(attempt * 2)
       })
     }
@@ -190,76 +196,145 @@ download_pdf_rows <- function(row_idx, df, output_dir) {
   )
 }
 
-cat("[2/3] Launching", num_sessions, "parallel headless Chrome sessions...\n")
-cl <- parallel::makeCluster(num_sessions)
-on.exit(try(parallel::stopCluster(cl), silent = TRUE), add = TRUE)
-parallel::clusterCall(cl, function(path) setwd(path), getwd())
-parallel::clusterExport(cl, "download_pdf_rows", envir = environment())
+download_muster_roll_pdfs <- function(district,
+                                      dd,
+                                      mm,
+                                      yyyy,
+                                      output_root,
+                                      num_sessions = 4,
+                                      log_callback = NULL) {
+  ensure_scraper_loaded()
 
-cat("[3/3] Saving", nrow(df), "pages as PDF...\n")
-row_indices <- seq_len(nrow(df))
-chunk_size <- ceiling(length(row_indices) / num_sessions)
-chunks <- split(row_indices, ceiling(seq_along(row_indices) / chunk_size))
+  date_err <- validate_date(dd, mm, yyyy)
+  if (!is.null(date_err)) {
+    stop("Invalid date (", dd, "/", mm, "/", yyyy, "): ", date_err, call. = FALSE)
+  }
 
-worker_results <- parallel::parLapply(
-  cl,
-  chunks,
-  function(rows, df, output_dir) download_pdf_rows(rows, df, output_dir),
-  df = df,
-  output_dir = output_dir
-)
+  district_err <- validate_district(district)
+  if (!is.null(district_err)) {
+    stop("Invalid district: ", district_err, call. = FALSE)
+  }
+  district <- canonicalize_district(district)
+  dist_slug <- district_slug(district)
 
-parallel::stopCluster(cl)
+  date_tag <- paste0(
+    sprintf("%02d", as.integer(dd)),
+    sprintf("%02d", as.integer(mm)),
+    yyyy
+  )
 
-for (res in worker_results) {
-  cat(res$messages, sep = "")
+  output_root <- normalizePath(output_root, winslash = "\\", mustWork = FALSE)
+  output_dir <- file.path(output_root, "MusterRollsPDF", date_tag)
+  dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+
+  emit_line(log_callback, "=== Muster Roll PDF Downloader ===\n")
+  emit_line(log_callback, "District: %s\n", district)
+  emit_line(log_callback, "Date: %s/%s/%s\n\n", dd, mm, yyyy)
+
+  emit_line(log_callback, "[1/3] Scraping NREGA data to get muster roll URLs...\n")
+  result <- scrape_up_data(
+    district,
+    dd,
+    mm,
+    yyyy,
+    scrape_musters = FALSE,
+    progress_callback = function(val, msg) emit_line(log_callback, "  %s\n", msg)
+  )
+
+  if (!result$success) stop("Scrape failed: ", result$error, call. = FALSE)
+  df <- result$data
+  emit_line(log_callback, "  Found %d muster rolls\n\n", nrow(df))
+
+  df$pdf_name <- make_pdf_names(df, dist_slug, date_tag)
+
+  num_sessions <- max(1, as.integer(num_sessions))
+  num_sessions <- min(num_sessions, max(1, nrow(df)))
+
+  emit_line(log_callback, "[2/3] Launching %d parallel headless Chrome sessions...\n", num_sessions)
+  cl <- parallel::makeCluster(num_sessions)
+  on.exit(try(parallel::stopCluster(cl), silent = TRUE), add = TRUE)
+  parallel::clusterCall(cl, function(path) setwd(path), getwd())
+  parallel::clusterCall(cl, function(paths) .libPaths(paths), .libPaths())
+  parallel::clusterExport(cl, "download_pdf_rows", envir = environment())
+
+  emit_line(log_callback, "[3/3] Saving %d pages as PDF...\n", nrow(df))
+  row_indices <- seq_len(nrow(df))
+  chunk_size <- ceiling(length(row_indices) / num_sessions)
+  chunks <- split(row_indices, ceiling(seq_along(row_indices) / chunk_size))
+
+  worker_results <- parallel::parLapply(
+    cl,
+    chunks,
+    function(rows, df, output_dir) download_pdf_rows(rows, df, output_dir),
+    df = df,
+    output_dir = output_dir
+  )
+
+  parallel::stopCluster(cl)
+
+  for (res in worker_results) {
+    cat(res$messages, sep = "")
+  }
+
+  combined_log <- do.call(rbind, lapply(worker_results, `[[`, "log"))
+  combined_log <- combined_log[order(combined_log$row), ]
+
+  log_status <- combined_log$Status
+  log_attempts <- combined_log$Attempts
+
+  success <- sum(log_status == "saved")
+  failed <- sum(log_status == "failed")
+  skipped <- sum(log_status == "skipped_no_url")
+  already <- sum(log_status == "already_saved")
+  failed_names <- df$pdf_name[log_status == "failed"]
+  skipped_names <- df$pdf_name[log_status == "skipped_no_url"]
+
+  emit_line(log_callback, "\n=== Done ===\n")
+  emit_line(log_callback, "Saved:          %d PDFs\n", success)
+  if (already > 0) {
+    emit_line(log_callback, "Already saved:  %d (skipped on resume)\n", already)
+  }
+  if (skipped > 0) {
+    emit_line(log_callback, "Skipped (no URL): %d\n", skipped)
+  }
+  emit_line(log_callback, "Failed:         %d\n", failed)
+
+  if (length(skipped_names) > 0) {
+    emit_line(log_callback, "\nSkipped muster rolls (no URL):\n")
+    for (fn in skipped_names) emit_line(log_callback, "  - %s\n", fn)
+  }
+  if (length(failed_names) > 0) {
+    emit_line(log_callback, "\nFailed muster rolls:\n")
+    for (fn in failed_names) emit_line(log_callback, "  - %s\n", fn)
+  }
+
+  log_df <- data.frame(
+    District = district,
+    Block = df$Block,
+    Panchayat = df$Panchayat,
+    Work_Code = df$Work_Code,
+    Mustroll_No = df$Mustroll_No,
+    URL = df$Mustroll_Link,
+    PDF_File = df$pdf_name,
+    Status = log_status,
+    Attempts = log_attempts,
+    stringsAsFactors = FALSE
+  )
+  log_path <- file.path(output_dir, paste0("download_log_", dist_slug, "_", date_tag, ".csv"))
+  write.csv(log_df, log_path, row.names = FALSE)
+
+  emit_line(log_callback, "Output: %s\n", output_dir)
+  emit_line(log_callback, "Log: %s\n", log_path)
+
+  list(
+    output_dir = output_dir,
+    log_path = log_path,
+    saved = success,
+    already_saved = already,
+    skipped = skipped,
+    failed = failed
+  )
 }
 
-combined_log <- do.call(rbind, lapply(worker_results, `[[`, "log"))
-combined_log <- combined_log[order(combined_log$row), ]
-
-log_status <- combined_log$Status
-log_attempts <- combined_log$Attempts
-
-success <- sum(log_status == "saved")
-failed <- sum(log_status == "failed")
-skipped <- sum(log_status == "skipped_no_url")
-already <- sum(log_status == "already_saved")
-failed_names <- df$pdf_name[log_status == "failed"]
-skipped_names <- df$pdf_name[log_status == "skipped_no_url"]
-
-# ---- Summary ----
-cat("\n=== Done ===\n")
-cat("Saved:         ", success, "PDFs\n")
-if (already > 0)
-  cat("Already saved: ", already, "(skipped on resume)\n")
-if (skipped > 0)
-  cat("Skipped (no URL):", skipped, "\n")
-cat("Failed:        ", failed, "\n")
-
-if (length(skipped_names) > 0) {
-  cat("\nSkipped muster rolls (no URL):\n")
-  for (fn in skipped_names) cat("  -", fn, "\n")
-}
-if (length(failed_names) > 0) {
-  cat("\nFailed muster rolls:\n")
-  for (fn in failed_names) cat("  -", fn, "\n")
-}
-cat("Output:", output_dir, "\n")
-
-# ---- Write summary CSV for easy review ----
-log_df <- data.frame(
-  District    = district,
-  Block       = df$Block,
-  Panchayat   = df$Panchayat,
-  Work_Code   = df$Work_Code,
-  Mustroll_No = df$Mustroll_No,
-  URL         = df$Mustroll_Link,
-  PDF_File    = df$pdf_name,
-  Status      = log_status,
-  Attempts    = log_attempts,
-  stringsAsFactors = FALSE
-)
-log_path <- file.path(output_dir, paste0("download_log_", dist_slug, "_", date_tag, ".csv"))
-write.csv(log_df, log_path, row.names = FALSE)
-cat("Log:", log_path, "\n")
+# This file intentionally defines functions only. The desktop app calls
+# download_muster_roll_pdfs() through app/run.R with user-provided settings.

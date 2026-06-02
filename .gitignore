@@ -1,3 +1,6 @@
 .Rhistory
 MusterRollsPDF
 data
+dist
+src/**/bin
+src/**/obj

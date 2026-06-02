@@ -17,6 +17,13 @@ public sealed class MainForm : Form
     private readonly Button openOutputButton = new() { Text = "Open Output Folder", Visible = false };
     private readonly Button openLogButton = new() { Text = "Open Log File", Visible = false };
     private readonly Label statusLabel = new() { AutoSize = false, Height = 28, Text = "Ready." };
+    private readonly Label freshnessHintLabel = new()
+    {
+        AutoSize = true,
+        Text = "Yesterday's PDFs: wait until 4 PM today. Earlier dates are safe.",
+        ForeColor = Color.DimGray,
+        Margin = new Padding(0, 0, 0, 12)
+    };
     private readonly TextBox logBox = new()
     {
         Multiline = true,
@@ -51,8 +58,9 @@ public sealed class MainForm : Form
             Dock = DockStyle.Fill,
             Padding = new Padding(16),
             ColumnCount = 1,
-            RowCount = 6
+            RowCount = 7
         };
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -96,6 +104,7 @@ public sealed class MainForm : Form
         districtCombo.Dock = DockStyle.Fill;
 
         root.Controls.Add(inputs, 0, 1);
+        root.Controls.Add(freshnessHintLabel, 0, 2);
 
         var outputRow = new TableLayoutPanel
         {
@@ -112,7 +121,7 @@ public sealed class MainForm : Form
         outputRow.Controls.Add(outputBox, 1, 0);
         outputRow.Controls.Add(browseButton, 2, 0);
 
-        root.Controls.Add(outputRow, 0, 2);
+        root.Controls.Add(outputRow, 0, 3);
 
         var actions = new FlowLayoutPanel
         {
@@ -129,14 +138,14 @@ public sealed class MainForm : Form
         actions.Controls.Add(openOutputButton);
         actions.Controls.Add(openLogButton);
 
-        root.Controls.Add(actions, 0, 3);
+        root.Controls.Add(actions, 0, 4);
 
         logBox.Dock = DockStyle.Fill;
         logBox.Font = new Font("Consolas", 9);
-        root.Controls.Add(logBox, 0, 4);
+        root.Controls.Add(logBox, 0, 5);
 
         statusLabel.Dock = DockStyle.Fill;
-        root.Controls.Add(statusLabel, 0, 5);
+        root.Controls.Add(statusLabel, 0, 6);
 
         Controls.Add(root);
     }
@@ -215,9 +224,10 @@ public sealed class MainForm : Form
         Directory.CreateDirectory(tempDir);
 
         lastOutputFolder = null;
+        var selectedDateTag = BuildSelectedDateTag();
         lastLogFile = Path.Combine(
             outputBox.Text,
-            $"muster_roll_downloader_{DateTime.Now:yyyyMMdd_HHmmss}.log"
+            $"muster_roll_downloader_{selectedDateTag}_{DateTime.Now:HHmmss}.log"
         );
 
         var configPath = Path.Combine(tempDir, $"config_{Guid.NewGuid():N}.json");
@@ -339,6 +349,14 @@ public sealed class MainForm : Form
         }
 
         return true;
+    }
+
+    private string BuildSelectedDateTag()
+    {
+        var dd = int.Parse(ddBox.Text.Trim());
+        var mm = int.Parse(mmBox.Text.Trim());
+        var yyyy = int.Parse(yyyyBox.Text.Trim());
+        return $"{dd:00}{mm:00}{yyyy:0000}";
     }
 
     private void AppendProcessLine(string? line)

@@ -40,7 +40,7 @@ cat("District:", district, "\n")
 cat("Date:", dd, "/", mm, "/", yyyy, "\n\n")
 
 # ---- Step 1: Scrape to get muster roll URLs ----
-cat("[1/3] Scraping NREGA data to get muster roll URLs...\n")
+cat("[1/4] Scraping NREGA data to get muster roll URLs...\n")
 result <- scrape_up_data(district, dd, mm, yyyy, scrape_musters = FALSE,
   progress_callback = function(val, msg) cat("  ", msg, "\n"))
 
@@ -75,12 +75,13 @@ if (any(dup_names)) {
   )
 }
 
-# ---- Step 3: Save each page as PDF via headless Chrome ----
-cat("[2/3] Launching headless Chrome...\n")
+# ---- Steps 2-4: Save each page as PDF via headless Chrome ----
+cat("[2/4] Launching headless Chrome...\n")
 b <- ChromoteSession$new()
 on.exit(try(b$close(), silent = TRUE))
 
-cat("[3/3] Saving", nrow(df), "pages as PDF...\n")
+cat("[3/4] Found", nrow(df), "pages to save\n")
+cat("[4/4] Saving in progress\n")
 # Force screen media so print CSS rules don't hide content
 b$Emulation$setEmulatedMedia(media = "screen")
 

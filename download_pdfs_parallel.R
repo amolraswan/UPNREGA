@@ -231,7 +231,7 @@ download_muster_roll_pdfs <- function(district,
   emit_line(log_callback, "District: %s\n", district)
   emit_line(log_callback, "Date: %s/%s/%s\n\n", dd, mm, yyyy)
 
-  emit_line(log_callback, "[1/3] Scraping NREGA data to get muster roll URLs...\n")
+  emit_line(log_callback, "[1/4] Scraping NREGA data to get muster roll URLs...\n")
   result <- scrape_up_data(
     district,
     dd,
@@ -250,14 +250,15 @@ download_muster_roll_pdfs <- function(district,
   num_sessions <- max(1, as.integer(num_sessions))
   num_sessions <- min(num_sessions, max(1, nrow(df)))
 
-  emit_line(log_callback, "[2/3] Launching %d parallel headless Chrome sessions...\n", num_sessions)
+  emit_line(log_callback, "[2/4] Launching %d parallel headless Chrome sessions...\n", num_sessions)
   cl <- parallel::makeCluster(num_sessions)
   on.exit(try(parallel::stopCluster(cl), silent = TRUE), add = TRUE)
   parallel::clusterCall(cl, function(path) setwd(path), getwd())
   parallel::clusterCall(cl, function(paths) .libPaths(paths), .libPaths())
   parallel::clusterExport(cl, "download_pdf_rows", envir = environment())
 
-  emit_line(log_callback, "[3/3] Saving %d pages as PDF...\n", nrow(df))
+  emit_line(log_callback, "[3/4] Found %d pages to save\n", nrow(df))
+  emit_line(log_callback, "[4/4] Saving in progress\n")
   row_indices <- seq_len(nrow(df))
   chunk_size <- ceiling(length(row_indices) / num_sessions)
   chunks <- split(row_indices, ceiling(seq_along(row_indices) / chunk_size))

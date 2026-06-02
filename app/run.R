@@ -48,10 +48,16 @@ if (length(missing_config) > 0) {
 output_folder <- normalizePath(config$output_folder, winslash = "\\", mustWork = FALSE)
 dir.create(output_folder, showWarnings = FALSE, recursive = TRUE)
 
+selected_date_tag <- paste0(
+  sprintf("%02d", as.integer(config$dd)),
+  sprintf("%02d", as.integer(config$mm)),
+  config$yyyy
+)
+
 run_log_path <- if (!is.null(config$run_log_path) && nzchar(config$run_log_path)) {
   normalizePath(config$run_log_path, winslash = "\\", mustWork = FALSE)
 } else {
-  file.path(output_folder, paste0("muster_roll_downloader_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".log"))
+  file.path(output_folder, paste0("muster_roll_downloader_", selected_date_tag, "_", format(Sys.time(), "%H%M%S"), ".log"))
 }
 dir.create(dirname(run_log_path), showWarnings = FALSE, recursive = TRUE)
 

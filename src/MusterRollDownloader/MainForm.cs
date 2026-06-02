@@ -324,6 +324,11 @@ public sealed class MainForm : Form
                 error = "Date is in the future.";
                 return false;
             }
+            if (date.Date == DateTime.Today)
+            {
+                error = "Cannot run for the same day. Choose yesterday or an earlier date.";
+                return false;
+            }
             if ((DateTime.Today - date.Date).TotalDays > 14)
             {
                 error = "Date must be within the past 14 days.";

@@ -97,6 +97,7 @@ download_pdf_rows <- function(row_idx, df, output_dir) {
   b <- ChromoteSession$new()
   on.exit(try(b$close(), silent = TRUE), add = TRUE)
 
+  try(b$Network$enable(), silent = TRUE)
   b$Emulation$setEmulatedMedia(media = "screen")
 
   for (pos in seq_along(row_idx)) {
@@ -117,6 +118,14 @@ download_pdf_rows <- function(row_idx, df, output_dir) {
       row_attempts[pos] <- 0
       next
     }
+
+    referer <- if ("Mustroll_Referer" %in% names(df)) df$Mustroll_Referer[i] else NA_character_
+    extra_headers <- if (!is.na(referer) && nzchar(referer)) {
+      list(Referer = referer)
+    } else {
+      list()
+    }
+    try(b$Network$setExtraHTTPHeaders(headers = extra_headers), silent = TRUE)
 
     saved <- FALSE
     for (attempt in 1:3) {
@@ -316,6 +325,7 @@ download_muster_roll_pdfs <- function(district,
     Work_Code = df$Work_Code,
     Mustroll_No = df$Mustroll_No,
     URL = df$Mustroll_Link,
+    Referer = if ("Mustroll_Referer" %in% names(df)) df$Mustroll_Referer else NA_character_,
     PDF_File = df$pdf_name,
     Status = log_status,
     Attempts = log_attempts,

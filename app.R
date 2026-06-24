@@ -30,7 +30,7 @@ ui <- page_navbar(
       column(4, textInput("yyyy", "YYYY", placeholder = "YYYY"))
     ),
     checkboxInput("chk_muster",
-                  "Scrape muster roll details (work names & 2nd photo, ~6 min)",
+                  "Scrape muster roll details (work names, ~6 min)",
                   value = FALSE),
     actionButton("btn_load", "Load Data", class = "btn-primary w-100"),
     hr(),
@@ -107,8 +107,9 @@ server <- function(input, output, session) {
     if (file.exists(csv_path)) {
       if (input$chk_muster) {
         existing <- read.csv(csv_path, stringsAsFactors = FALSE, nrows = 5)
-        can_reuse <- "Has_Second_Photo" %in% names(existing) &&
-                     !all(is.na(existing$Has_Second_Photo))
+        can_reuse <- "Work_Name" %in% names(existing) &&
+                     any(!is.na(existing$Work_Name) &
+                         nzchar(trimws(existing$Work_Name)))
       } else {
         can_reuse <- TRUE
       }
@@ -143,7 +144,6 @@ server <- function(input, output, session) {
     csv_path <- file.path("data", paste0("data_", dist_slug, "_", date_tag, ".csv"))
     df <- read.csv(csv_path, stringsAsFactors = FALSE)
     if (!"Work_Name" %in% names(df)) df$Work_Name <- NA_character_
-    if (!"Has_Second_Photo" %in% names(df)) df$Has_Second_Photo <- NA
     rv$data <- df
     rv$district <- district
     rv$date_label <- paste0(dd, "/", mm, "/", yyyy)
@@ -202,10 +202,6 @@ server <- function(input, output, session) {
         Mustroll_Nos = paste0(
           '<a href="', Mustroll_Link, '" target="_blank">', Mustroll_No, '</a>'
         ) %>% paste(collapse = ", "),
-        `2nd Photo Mustrolls` = {
-          photo_rolls <- Mustroll_No[!is.na(Has_Second_Photo) & Has_Second_Photo == TRUE]
-          if (length(photo_rolls) == 0) "-" else paste(photo_rolls, collapse = ", ")
-        },
         Persondays = sum(Persondays, na.rm = TRUE),
         .groups = "drop"
       ) %>%
@@ -216,13 +212,12 @@ server <- function(input, output, session) {
       ) %>%
       select(Block, Panchayat, `Work Code`,
              `Mustroll No(s)` = Mustroll_Nos,
-             `2nd Photo Mustrolls`,
              Persondays) %>%
       mutate(Block = factor(Block), Panchayat = factor(Panchayat))
 
     datatable(df, escape = FALSE, rownames = FALSE, filter = "top",
               options = list(pageLength = 25, scrollX = TRUE,
-                             order = list(list(5, "desc")),
+                             order = list(list(4, "desc")),
                              columnDefs = list(list(
                                targets = 1,
                                render = DT::JS(
@@ -242,9 +237,6 @@ server <- function(input, output, session) {
     df <- rv$data %>%
       group_by(Block, Panchayat) %>%
       summarise(
-        `2nd Photo` = paste0(
-          sum(Has_Second_Photo == TRUE, na.rm = TRUE), "/", n()
-        ),
         `Total Persondays` = sum(Persondays, na.rm = TRUE),
         .groups = "drop"
       ) %>%
@@ -252,7 +244,7 @@ server <- function(input, output, session) {
 
     datatable(df, escape = FALSE, rownames = FALSE, filter = "top",
               options = list(pageLength = 25, scrollX = TRUE,
-                             order = list(list(3, "desc")),
+                             order = list(list(2, "desc")),
                              columnDefs = list(list(
                                targets = 1,
                                render = DT::JS(
@@ -299,10 +291,6 @@ server <- function(input, output, session) {
         `Mustroll No(s)` = paste0(
           '<a href="', Mustroll_Link, '" target="_blank">', Mustroll_No, '</a>'
         ) %>% paste(collapse = ", "),
-        `2nd Photo Mustrolls` = {
-          photo_rolls <- Mustroll_No[!is.na(Has_Second_Photo) & Has_Second_Photo == TRUE]
-          if (length(photo_rolls) == 0) "-" else paste(photo_rolls, collapse = ", ")
-        },
         Persondays = sum(Persondays, na.rm = TRUE),
         .groups = "drop"
       ) %>%
@@ -311,11 +299,11 @@ server <- function(input, output, session) {
                              ifelse(is.na(Work_Name_raw), "", Work_Name_raw),
                              '</small>')
       ) %>%
-      select(`Work Code`, `Mustroll No(s)`, `2nd Photo Mustrolls`, Persondays)
+      select(`Work Code`, `Mustroll No(s)`, Persondays)
 
     datatable(df, escape = FALSE, rownames = FALSE,
               options = list(pageLength = 50, scrollX = TRUE,
-                             order = list(list(3, "desc"))),
+                             order = list(list(2, "desc"))),
               class = "compact stripe hover")
   })
 
@@ -332,10 +320,6 @@ server <- function(input, output, session) {
         summarise(
           Work_Name = first(na.omit(Work_Name)),
           `Mustroll No(s)` = paste(Mustroll_No, collapse = ", "),
-          `2nd Photo Mustrolls` = {
-            photo_rolls <- Mustroll_No[!is.na(Has_Second_Photo) & Has_Second_Photo == TRUE]
-            if (length(photo_rolls) == 0) "-" else paste(photo_rolls, collapse = ", ")
-          },
           Persondays = sum(Persondays, na.rm = TRUE),
           .groups = "drop"
         ) %>%
@@ -353,7 +337,6 @@ server <- function(input, output, session) {
       df <- rv$data %>%
         group_by(Block, Panchayat) %>%
         summarise(
-          `2nd Photo` = paste0(sum(Has_Second_Photo == TRUE, na.rm = TRUE), "/", n()),
           `Total Persondays` = sum(Persondays, na.rm = TRUE),
           .groups = "drop"
         ) %>%
@@ -375,10 +358,6 @@ server <- function(input, output, session) {
         summarise(
           Work_Name = first(na.omit(Work_Name)),
           `Mustroll No(s)` = paste(Mustroll_No, collapse = ", "),
-          `2nd Photo Mustrolls` = {
-            photo_rolls <- Mustroll_No[!is.na(Has_Second_Photo) & Has_Second_Photo == TRUE]
-            if (length(photo_rolls) == 0) "-" else paste(photo_rolls, collapse = ", ")
-          },
           Persondays = sum(Persondays, na.rm = TRUE),
           .groups = "drop"
         ) %>%

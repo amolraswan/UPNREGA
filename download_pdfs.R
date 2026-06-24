@@ -83,6 +83,7 @@ on.exit(try(b$close(), silent = TRUE))
 cat("[3/4] Found", nrow(df), "pages to save\n")
 cat("[4/4] Saving in progress\n")
 # Force screen media so print CSS rules don't hide content
+try(b$Network$enable(), silent = TRUE)
 b$Emulation$setEmulatedMedia(media = "screen")
 
 success <- 0; failed <- 0; skipped <- 0; already <- 0
@@ -114,6 +115,14 @@ for (i in seq_len(nrow(df))) {
     log_attempts[i] <- 0
     next
   }
+
+  referer <- if ("Mustroll_Referer" %in% names(df)) df$Mustroll_Referer[i] else NA_character_
+  extra_headers <- if (!is.na(referer) && nzchar(referer)) {
+    list(Referer = referer)
+  } else {
+    list()
+  }
+  try(b$Network$setExtraHTTPHeaders(headers = extra_headers), silent = TRUE)
 
   saved <- FALSE
   for (attempt in 1:3) {
@@ -209,6 +218,7 @@ log_df <- data.frame(
   Work_Code   = df$Work_Code,
   Mustroll_No = df$Mustroll_No,
   URL         = df$Mustroll_Link,
+  Referer     = if ("Mustroll_Referer" %in% names(df)) df$Mustroll_Referer else NA_character_,
   PDF_File    = df$pdf_name,
   Status      = log_status,
   Attempts    = log_attempts,

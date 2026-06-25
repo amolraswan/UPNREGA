@@ -86,5 +86,5 @@ download_muster_roll_pdfs(
 ```
 
 It preserves the original scrape-then-download behavior, writes PDFs under
-`<output_root>/MusterRollsPDF/<DDMMYYYY>/`, and writes a CSV download log in the
-same folder. It does not call `install.packages()` at runtime.
+`<output_root>/<DDMMYYYY>/`, and writes a CSV download log in the same folder.
+It does not call `install.packages()` at runtime.

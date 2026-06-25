@@ -233,7 +233,7 @@ download_muster_roll_pdfs <- function(district,
   )
 
   output_root <- normalizePath(output_root, winslash = "\\", mustWork = FALSE)
-  output_dir <- file.path(output_root, "MusterRollsPDF", date_tag)
+  output_dir <- file.path(output_root, date_tag)
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
   emit_line(log_callback, "=== Muster Roll PDF Downloader ===\n")

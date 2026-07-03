@@ -40,7 +40,7 @@ cat("District:", district, "\n")
 cat("Date:", dd, "/", mm, "/", yyyy, "\n\n")
 
 # ---- Step 1: Scrape to get muster roll URLs ----
-cat("[1/4] Scraping NREGA data to get muster roll URLs...\n")
+cat("[1/4] Scraping VB-GRAMG data to get muster roll URLs...\n")
 result <- scrape_up_data(district, dd, mm, yyyy, scrape_musters = FALSE,
   progress_callback = function(val, msg) cat("  ", msg, "\n"))
 

@@ -4,9 +4,9 @@ library(xml2)
 library(dplyr)
 library(curl)
 
-NREGA_HOME_URL <- "https://nrega.dord.gov.in/MGNREGA_new/Nrega_home.aspx"
-NREGA_PORTAL_ORIGIN <- "https://mnregaweb4.dord.gov.in"
-BASE_URL <- paste0(NREGA_PORTAL_ORIGIN, "/netnrega/")
+NREGA_HOME_URL <- "https://vbgramg.dord.gov.in/vbgramg/home.aspx"
+NREGA_PORTAL_ORIGIN <- "https://vbgramgrep.dord.gov.in"
+BASE_URL <- paste0(NREGA_PORTAL_ORIGIN, "/vbgramg/")
 
 UA_STRING <- "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 UA <- user_agent(UA_STRING)
@@ -496,13 +496,13 @@ scrape_up_data <- function(district, dd, mm, yyyy, scrape_musters = FALSE, progr
   h <- handle(NREGA_PORTAL_ORIGIN)
 
   # ---- Step 1: Get NMMS link from homepage ----
-  notify(0.05, "Fetching NREGA homepage...")
+  notify(0.05, "Fetching VB-GRAMG homepage...")
   home_resp <- tryCatch(
     GET(NREGA_HOME_URL, UA, PORTAL_HEADERS, timeout(60)),
     error = function(e) NULL
   )
   if (is.null(home_resp) || status_code(home_resp) != 200) {
-    return(list(success = FALSE, error = "Could not reach NREGA homepage."))
+    return(list(success = FALSE, error = "Could not reach VB-GRAMG homepage."))
   }
 
   home_html <- read_html(response_text(home_resp))

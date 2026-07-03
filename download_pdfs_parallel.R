@@ -240,7 +240,7 @@ download_muster_roll_pdfs <- function(district,
   emit_line(log_callback, "District: %s\n", district)
   emit_line(log_callback, "Date: %s/%s/%s\n\n", dd, mm, yyyy)
 
-  emit_line(log_callback, "[1/4] Scraping NREGA data to get muster roll URLs...\n")
+  emit_line(log_callback, "[1/4] Scraping VB-GRAMG data to get muster roll URLs...\n")
   result <- scrape_up_data(
     district,
     dd,

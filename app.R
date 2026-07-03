@@ -11,7 +11,7 @@ source("R/scraper.R")
 ui <- page_navbar(
   id = "main_nav",
   title = uiOutput("app_title", inline = TRUE),
-  window_title = "UPNREGA",
+  window_title = "UP VB-GRAMG DAILY Person-Days",
   theme = bs_theme(bootswatch = "flatly"),
   header = tags$head(tags$script(src = "custom.js")),
 
@@ -23,7 +23,7 @@ ui <- page_navbar(
                 selected = ""),
     hr(),
     h5("Select Date"),
-    helpText("Enter a date from the past 7 days"),
+    helpText("Enter a date from the past 14 days"),
     fluidRow(
       column(4, textInput("dd", "DD", placeholder = "DD")),
       column(4, textInput("mm", "MM", placeholder = "MM")),
@@ -66,9 +66,9 @@ server <- function(input, output, session) {
 
   output$app_title <- renderUI({
     if (is.null(rv$date_label)) {
-      "UP NREGA Daily Person-Days"
+      "UP VB-GRAMG DAILY Person-Days"
     } else {
-      paste0(rv$district, " NREGA Daily Person-Days ", rv$date_label)
+      paste0(rv$district, " VB-GRAMG DAILY Person-Days ", rv$date_label)
     }
   })
 
@@ -166,7 +166,7 @@ server <- function(input, output, session) {
     output$status_msg <- renderUI(tags$span(style = "color:blue;",
                                             paste0("Scraping ", district, " in progress...")))
 
-    withProgress(message = "Scraping NREGA data...", value = 0, {
+    withProgress(message = "Scraping VB-GRAMG data...", value = 0, {
       result <- scrape_up_data(district, dd, mm, yyyy,
                                scrape_musters = scrape_musters,
                                progress_callback = function(val, msg) {
